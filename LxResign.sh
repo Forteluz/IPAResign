@@ -1,8 +1,15 @@
 #!/bin/sh
-
-#-----------------------------------------------------------------------------------------------------------------------------
-#  仅用于优酷内部企业证书打包
-#-----------------------------------------------------------------------------------------------------------------------------
+#
+#-------------------------------------------------------------------------------------------------
+#  仅用于YK组内用于企业证书打包（如果提供给其他团队或者外部人员使用，需要删除默认证书信息！）
+#  info修改的部分功能来自于 http://www.floatlearning.com/
+#-------------------------------------------------------------------------------------------------
+#  v1.0(beta)
+#-------------------------------------------------------------------------------------------------
+#  2015.5.18
+#  1、去掉修改bundleId功能，以后改成参数修改项
+#  2、暂时不删除临时目录，测试观察用
+#-------------------------------------------------------------------------------------------------
 
 function checkStatus {
 if [ $? -ne 0 ];then
@@ -18,7 +25,8 @@ echo "使用说明:ipaName.ipa plistName.plist [-p name.mobileprovision] [-c cer
 echo "        -c 是可选参数, 默认是：iPhone Distribution: 1 Verge Information Technology Co., Ltd."
 echo "        -b 是可选参数，可以重新生成新的app名字"
 echo "        (检查本地证书命令 :$ security find-identity -v -p codesigning)"
-echo "        例: $:./YKIPAGo.sh youku.ipa youku.plist -p youku.mobileprovision"
+echo "        例:(如果没有权限，使用chmod +x LxResign)$:./LxResign.sh youku.ipa youku.plist -p youku.mobileprovision"
+echo "        另外可以使用security cms -D -i name.mobileprovision命令查看描述信息"
 exit 1
 fi
 
@@ -27,11 +35,11 @@ echo "===========>YKIPAGo开始打包<==========="
 
 ORIGINAL_FILE="$1"
 ENTITLEMENTS="$2"
-IPA_NAME=${1%.ipa}
 NEW_PROVISION=""
 CERTIFICATE="iPhone Distribution: 1 Verge Information Technology Co., Ltd."
 TEMP_DIR="_YKIPAGoTemp"
 DISPLAY_NAME=""
+TEAM_IDENTIFIER=""
 
 echo ">打包文件:'$ORIGINAL_FILE'">&2
 echo ">配置文件:'$ENTITLEMENTS'">&2
@@ -90,6 +98,9 @@ echo "ERR>错误，打包源文件只能是ipa或者app">&2
 exit
 fi
 
+rm -rf "$TEMP_DIR/Payload/$APP_NAME/_CodeSignature/"
+echo ">删除旧的_CodeSignature"
+
 APP_NAME=$(ls "$TEMP_DIR/Payload/")
 
 if [ ! -e "$TEMP_DIR/Payload/$APP_NAME/Info.plist" ];
@@ -110,14 +121,11 @@ then
 BUNDLE_IDENTIFIER=$(egrep -a -A 2 application-identifier "${NEW_PROVISION}" | grep string | sed -e 's/<string>//' -e 's/<\/string>//' -e 's/ //' | awk '{split($0,a,"."); i = length(a); for(ix=2; ix <= i;ix++){ s=s a[ix]; if(i!=ix){s=s "."};} print s;}')
 
 if [[ "${BUNDLE_IDENTIFIER}" == *\** ]]; then
-echo "Bundle Identifier contains a *, using the current bundle identifier">&2
+echo "Bundle Identifier 使用通配符 *, 不需要更换">&2
 BUNDLE_IDENTIFIER=$CURRENT_BUNDLE_IDENTIFIER;
 fi
 checkStatus
 fi
-
-echo "当前的bundle identifier: '$CURRENT_BUNDLE_IDENTIFIER'"
-echo "新bundle identifier: '$BUNDLE_IDENTIFIER'"
 
 if [ "${DISPLAY_NAME}" != "" ];
 then
@@ -128,10 +136,10 @@ PlistBuddy -c "Set :CFBundleDisplayName $DISPLAY_NAME" "$TEMP_DIR/Payload/$APP_N
 fi
 fi
 
-
+#设置信息并替换embedded.mobileprovision
 if [ "$NEW_PROVISION" != "" ];then
 if [[ -e "$NEW_PROVISION" ]];then
-echo ">mobileprovision文件验证通过，开始将信息写入临时文件: $NEW_PROVISION">&2
+echo ">$NEW_PROVISION文件验证通过">&2
 security cms -D -i "$NEW_PROVISION" > "$TEMP_DIR/profile.plist"
 
 checkStatus
@@ -142,7 +150,7 @@ if [ "$APP_IDENTIFER_PREFIX" == "" ];then
 APP_IDENTIFER_PREFIX=$(PlistBuddy -c "Print :ApplicationIdentifierPrefix:0" "$TEMP_DIR/profile.plist")
 
 if [ "$APP_IDENTIFER_PREFIX" == "" ];then
-echo "ERR:文件中读取不到任何前缀'$NEW_PROVISION'">&2
+echo "ERR:Failed to extract any app identifier prefix from '$NEW_PROVISION'">&2
 exit 1;
 else
 echo "ERR:WARNING: extracted an app identifier prefix '$APP_IDENTIFER_PREFIX' from '$NEW_PROVISION', but it was not found in the profile's entitlements" >&2
@@ -167,7 +175,7 @@ fi
 
 cp "$NEW_PROVISION" "$TEMP_DIR/Payload/$APP_NAME/embedded.mobileprovision"
 else
-echo "Provisioning profile '$NEW_PROVISION' 文件不存在" >&2
+echo "ERR:Provisioning profile '$NEW_PROVISION' 文件不存在" >&2
 exit 1;
 fi
 else
@@ -175,53 +183,53 @@ echo "-p 'xxxx.mobileprovision' 这个参数没设置！" >&2
 exit 1;
 fi
 
-#更换bundle id
-if [ "$CURRENT_BUNDLE_IDENTIFIER" != "$BUNDLE_IDENTIFIER" ];then
-echo "Updating the bundle identifier from '$CURRENT_BUNDLE_IDENTIFIER' to '$BUNDLE_IDENTIFIER'" >&2
-PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_IDENTIFIER" "$TEMP_DIR/Payload/$APP_NAME/Info.plist"
-checkStatus
-fi
+#更换bundle id(暂时不更换，添加到可选功能里)
+#if [ "$CURRENT_BUNDLE_IDENTIFIER" != "$BUNDLE_IDENTIFIER" ];then
+#    echo "Updating the bundle identifier from '$CURRENT_BUNDLE_IDENTIFIER' to '$BUNDLE_IDENTIFIER'" >&2
+#    PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_IDENTIFIER" "$TEMP_DIR/Payload/$APP_NAME/Info.plist"
+#    checkStatus
+#fi
+#echo ">当前的bundle identifier: '$CURRENT_BUNDLE_IDENTIFIER'"
+#echo ">新bundle identifier: '$BUNDLE_IDENTIFIER'"
 
 # Check for and resign any embedded frameworks (new feature for iOS 8 and above apps)
-FRAMEWORKS_DIR="$TEMP_DIR/Payload/$APP_NAME/Frameworks"
-if [ -d "$FRAMEWORKS_DIR" ];
-then
-if [ "$TEAM_IDENTIFIER" == "" ];
-then
-echo "ERROR: embedded frameworks detected, re-signing iOS 8 (or higher) applications wihout a team identifier in the certificate/profile does not work" >&2
-exit 1;
-fi
-
-echo "签名 embedded frameworks 使用证书: '$CERTIFICATE'" >&2
-for framework in "$FRAMEWORKS_DIR"/*
-do
-if [[ "$framework" == *.framework ]];then
-/usr/bin/codesign -f -s "$CERTIFICATE" "$framework"
-checkStatus
-else
-echo "Ignoring non-framework: $framework" >&2
-fi
-done
-fi
-
+#FRAMEWORKS_DIR="$TEMP_DIR/Payload/$APP_NAME/Frameworks"
+#if [ -d "$FRAMEWORKS_DIR" ];
+#then
+#    if [ "$TEAM_IDENTIFIER" == "" ];
+#    then
+#        echo "ERROR: embedded frameworks detected, re-signing iOS 8 (or higher) applications wihout a team identifier in the certificate/profile does not work" >&2
+#    exit 1;
+#    fi
+#
+#    echo "签名 embedded frameworks 使用证书: '$CERTIFICATE'" >&2
+#    for framework in "$FRAMEWORKS_DIR"/*
+#    do
+#        if [[ "$framework" == *.framework ]];then
+#            /usr/bin/codesign -f -s "$CERTIFICATE" "$framework"
+#            checkStatus
+#        else
+#            echo ">Ignoring non-framework: $framework" >&2
+#        fi
+#    done
+#fi
 
 if [ "$ENTITLEMENTS" != "" ]; then
 if [ -n "$APP_IDENTIFER_PREFIX" ]; then
-# sanity check the 'application-identifier' is present in the provided entitlements and matches the provisioning profile value
 ENTITLEMENTS_APP_ID_PREFIX=$(PlistBuddy -c "Print :application-identifier" "$ENTITLEMENTS" | grep -E '^[A-Z0-9]*' -o | tr -d '\n')
 
 if [ "$ENTITLEMENTS_APP_ID_PREFIX" == "" ]; then
-echo "Provided entitlements file is missing a value for the required 'application-identifier' key" >&2
+echo "ERR:Provided entitlements file is missing a value for the required 'application-identifier' key" >&2
 exit 1;
 elif [ "$ENTITLEMENTS_APP_ID_PREFIX" != "$APP_IDENTIFER_PREFIX" ];then
-echo "Provided entitlements file's app identifier prefix value '$ENTITLEMENTS_APP_ID_PREFIX' does not match the provided provisioning profile's value '$APP_IDENTIFER_PREFIX'" >&2
+echo "ERR:entitlements文件里面的app identifier prefix '$ENTITLEMENTS_APP_ID_PREFIX'和provisioning profile's 的 '$APP_IDENTIFER_PREFIX'" >&2
 exit 1;
 fi
 fi
 fi
 
-echo "开始签名使用证书: '$CERTIFICATE'" >&2
-echo "还有配置文件: $ENTITLEMENTS" >&2
+echo ">开始签名使用证书: '$CERTIFICATE'" >&2
+echo ">还有配置文件: $ENTITLEMENTS" >&2
 /usr/bin/codesign -f -s "$CERTIFICATE" --entitlements="$ENTITLEMENTS" "$TEMP_DIR/Payload/$APP_NAME"
 
 checkStatus
@@ -230,9 +238,6 @@ pushd "$TEMP_DIR" > /dev/null
 zip -qr "../$TEMP_DIR.ipa" ./*
 popd > /dev/null
 
-# Move the resulting ipa to the target destination
-#mv "$TEMP_DIR.ipa" "$NEW_FILE"
-
 #rm -rf "$TEMP_DIR"
 
-echo "===================>打包完成<===================" >&2
+echo ">===================>打包完成<===================" >&2

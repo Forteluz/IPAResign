@@ -22,7 +22,7 @@ if [ $# -lt 3 ];
 then
 echo "ERR:缺少参数">&2
 echo "使用说明:ipaName.ipa plistName.plist [-p name.mobileprovision] [-c certificate] [-b newAppName]"
-echo "        -c 是可选参数, 默认是：iPhone Distribution: 1 Verge Information Technology Co., Ltd."
+echo "        -c 是可选参数(前提是需要修改文件，需要给CERTIFICATE赋值)"
 echo "        -b 是可选参数，可以重新生成新的app名字"
 echo "        (检查本地证书命令 :$ security find-identity -v -p codesigning)"
 echo "        例:(如果没有权限，使用chmod +x LxResign)$:./LxResign.sh youku.ipa youku.plist -p youku.mobileprovision"
@@ -36,7 +36,7 @@ echo "===========>YKIPAGo开始打包<==========="
 ORIGINAL_FILE="$1"
 ENTITLEMENTS="$2"
 NEW_PROVISION=""
-CERTIFICATE="iPhone Distribution: 1 Verge Information Technology Co., Ltd."
+CERTIFICATE="请在这里填写证书信息，检查本地证书命令 :$ security find-identity -v -p codesigning"
 TEMP_DIR="_YKIPAGoTemp"
 DISPLAY_NAME=""
 TEAM_IDENTIFIER=""

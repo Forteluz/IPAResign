@@ -1,4 +1,5 @@
 # IPAResign
+
 使用说明paName.ipa plistName.plist [-p name.mobileprovision] [-c certificate] [-b newAppName]
 -c 是可选参数(前提是需要修改文件，需要给CERTIFICATE赋值)
 -b 是可选参数，可以重新生成新的app名字

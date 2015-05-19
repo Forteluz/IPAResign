@@ -37,7 +37,7 @@ ORIGINAL_FILE="$1"
 ENTITLEMENTS="$2"
 NEW_PROVISION=""
 CERTIFICATE="请在这里填写证书信息，检查本地证书命令 :$ security find-identity -v -p codesigning"
-TEMP_DIR="_YKIPAGoTemp"
+TEMP_DIR="_YKIPATemp"
 DISPLAY_NAME=""
 TEAM_IDENTIFIER=""
 
